@@ -109,11 +109,11 @@ export default function MemberPortal() {
       }
       const data = await res.json();
 
-      // clubT has no FK constraint linking it to memberT, so PostgREST
+      // ClubT has no FK constraint linking it to memberT, so PostgREST
       // can't auto-embed it — we fetch it separately and join by
-      // "Club No" (memberT) -> CLUBID (clubT) in JS instead.
+      // "Club No" (memberT) -> CLUBID (ClubT) in JS instead.
       const clubRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/clubT?select=${encodeURIComponent(
+        `${SUPABASE_URL}/rest/v1/ClubT?select=${encodeURIComponent(
           `"CLUBID","Club_Name"`
         )}`,
         {
@@ -461,4 +461,3 @@ export default function MemberPortal() {
     </div>
   );
 }
-
