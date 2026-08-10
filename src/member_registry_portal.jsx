@@ -77,11 +77,13 @@ export default function MemberPortal() {
     try {
       // Column names with spaces (like "Given Name") need to be quoted
       // inside the select param, then the whole thing URL-encoded.
-      // MEMID is always pulled from member (even though it's not in
-      // REPORT_COLUMNS anymore) since WASRAID is computed from it and
-      // it's also used to dedupe rows below.
+      // MEMID and "Club No" are always pulled from member (even though
+      // neither is in REPORT_COLUMNS) since WASRAID is computed from
+      // MEMID, MEMID is used to dedupe rows below, and "Club No" is
+      // needed to join against clubT client-side (see note below).
       const memberFields = [
         `"MEMID"`,
+        `"Club No"`,
         ...REPORT_COLUMNS.filter((c) => c.source === "member").map(
           (c) => `"${c.key}"`
         ),
@@ -89,15 +91,7 @@ export default function MemberPortal() {
       const paidFields = REPORT_COLUMNS.filter((c) => c.source === "paid")
         .map((c) => `"${c.key}"`)
         .join(",");
-      // Club Name lives on ClubT, joined from memberT via the "Club No"
-      // foreign key -> ClubT's id. This relies on a real FK constraint
-      // between memberT."Club No" and ClubT existing in the database
-      // so PostgREST can auto-detect the embed; if this select fails,
-      // that constraint is the first thing to check.
-      const clubFields = REPORT_COLUMNS.filter((c) => c.source === "club")
-        .map((c) => `"${c.key}"`)
-        .join(",");
-      const selectParam = `${paidFields},memberT(${memberFields},ClubT(${clubFields}))`;
+      const selectParam = `${paidFields},memberT(${memberFields})`;
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/PaidT?FKFYID=eq.${CURRENT_FY_ID}&select=${encodeURIComponent(
           selectParam
@@ -115,17 +109,40 @@ export default function MemberPortal() {
       }
       const data = await res.json();
 
+      // clubT has no FK constraint linking it to memberT, so PostgREST
+      // can't auto-embed it — we fetch it separately and join by
+      // "Club No" (memberT) -> CLUBID (clubT) in JS instead.
+      const clubRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/clubT?select=${encodeURIComponent(
+          `"CLUBID","Club_Name"`
+        )}`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      if (!clubRes.ok) {
+        const clubData = await clubRes.json().catch(() => ({}));
+        throw new Error(clubData.message || "Could not load club names");
+      }
+      const clubData = await clubRes.json();
+      const clubNameById = new Map(
+        clubData.map((c) => [c.CLUBID, c.Club_Name])
+      );
+
       // Each PaidT row carries a nested memberT record. Merge the two,
       // and dedupe in case a member has more than one payment this FY.
       const byId = new Map();
       for (const row of data) {
         const { memberT, ...paidRest } = row;
         if (!memberT) continue;
-        const { ClubT, ...memberRest } = memberT;
+        const { "Club No": clubNo, ...memberRest } = memberT;
         const merged = {
           ...memberRest,
           ...paidRest,
-          Club_Name: ClubT?.Club_Name ?? null,
+          Club_Name: clubNameById.get(clubNo) ?? null,
           WASRAID: toWasraid(memberRest.MEMID),
         };
         if (!byId.has(merged.MEMID)) {
@@ -444,3 +461,4 @@ export default function MemberPortal() {
     </div>
   );
 }
+
