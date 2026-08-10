@@ -41,6 +41,7 @@ export default function MemberPortal() {
   const [members, setMembers] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   async function handleSignIn(e) {
     e.preventDefault();
@@ -167,7 +168,19 @@ export default function MemberPortal() {
     setMembers(null);
     setEmail("");
     setPassword("");
+    setSearchQuery("");
   }
+
+  // Case-insensitive substring match against Given Name or Surname.
+  const filteredMembers =
+    members && searchQuery.trim()
+      ? members.filter((m) => {
+          const q = searchQuery.trim().toLowerCase();
+          const given = String(m["Given Name"] ?? "").toLowerCase();
+          const surname = String(m["Surname"] ?? "").toLowerCase();
+          return given.includes(q) || surname.includes(q);
+        })
+      : members;
 
   return (
     <div className="portal-root">
@@ -327,6 +340,24 @@ export default function MemberPortal() {
           margin-bottom: 14px;
         }
 
+        .search-field {
+          width: 100%;
+          max-width: 320px;
+          padding: 9px 12px;
+          border: 1px solid var(--rule);
+          border-radius: 3px;
+          background: var(--paper-raised);
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 13.5px;
+          color: var(--ink);
+          margin-bottom: 12px;
+          display: block;
+        }
+        .search-field:focus {
+          outline: 2px solid var(--forest);
+          outline-offset: 1px;
+        }
+
         .table-wrap {
           background: var(--paper-raised);
           border: 1px solid var(--rule);
@@ -422,14 +453,28 @@ export default function MemberPortal() {
 
           {!reportLoading && !reportError && members && (
             <>
+              <input
+                className="search-field"
+                type="text"
+                placeholder="Search by first name or surname…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
               <p className="report-meta">
-                {members.length} member{members.length === 1 ? "" : "s"} on
-                record for {CURRENT_FY_LABEL}
+                {searchQuery.trim()
+                  ? `${filteredMembers.length} of ${members.length} member${
+                      members.length === 1 ? "" : "s"
+                    } matching "${searchQuery.trim()}"`
+                  : `${members.length} member${
+                      members.length === 1 ? "" : "s"
+                    } on record for ${CURRENT_FY_LABEL}`}
               </p>
-              {members.length === 0 ? (
+              {filteredMembers.length === 0 ? (
                 <div className="table-wrap">
                   <div className="empty-state">
-                    No members are recorded for the current fiscal year yet.
+                    {members.length === 0
+                      ? "No members are recorded for the current fiscal year yet."
+                      : "No members match that search."}
                   </div>
                 </div>
               ) : (
@@ -443,7 +488,7 @@ export default function MemberPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {members.map((row, i) => (
+                      {filteredMembers.map((row, i) => (
                         <tr key={i}>
                           {REPORT_COLUMNS.map((col) => (
                             <td key={col.key}>{String(row[col.key] ?? "—")}</td>
