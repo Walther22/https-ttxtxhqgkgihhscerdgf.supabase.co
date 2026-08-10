@@ -14,13 +14,22 @@ const CURRENT_FY_ID = 3;
 const CURRENT_FY_LABEL = "FY26";
 
 // Only these columns are shown, in this order. `source` says which
-// table the field actually lives on.
+// table the field actually lives on. "computed" columns are derived
+// client-side in fetchReport rather than pulled straight from a column.
 const REPORT_COLUMNS = [
-  { key: "MEMID", label: "Member ID", source: "member" },
+  { key: "WASRAID", label: "WASRAID", source: "computed" },
   { key: "Given Name", label: "Given Name", source: "member" },
   { key: "Surname", label: "Surname", source: "member" },
+  { key: "Club_Name", label: "Club Name", source: "club" },
   { key: "EntryDate", label: "Entry Date", source: "paid" },
 ];
+
+// WASRAID = state number "6" + MEMID zero-padded to at least 4 digits.
+// padStart never truncates, so MEMID values of 5+ digits pass through
+// untouched (e.g. 12345 -> "612345") rather than being cut off.
+function toWasraid(memid) {
+  return `6${String(memid).padStart(4, "0")}`;
+}
 
 export default function MemberPortal() {
   const [email, setEmail] = useState("");
@@ -68,13 +77,27 @@ export default function MemberPortal() {
     try {
       // Column names with spaces (like "Given Name") need to be quoted
       // inside the select param, then the whole thing URL-encoded.
-      const memberFields = REPORT_COLUMNS.filter((c) => c.source === "member")
-        .map((c) => `"${c.key}"`)
-        .join(",");
+      // MEMID is always pulled from member (even though it's not in
+      // REPORT_COLUMNS anymore) since WASRAID is computed from it and
+      // it's also used to dedupe rows below.
+      const memberFields = [
+        `"MEMID"`,
+        ...REPORT_COLUMNS.filter((c) => c.source === "member").map(
+          (c) => `"${c.key}"`
+        ),
+      ].join(",");
       const paidFields = REPORT_COLUMNS.filter((c) => c.source === "paid")
         .map((c) => `"${c.key}"`)
         .join(",");
-      const selectParam = `${paidFields},memberT(${memberFields})`;
+      // Club Name lives on ClubT, joined from memberT via the "Club No"
+      // foreign key -> ClubT's id. This relies on a real FK constraint
+      // between memberT."Club No" and ClubT existing in the database
+      // so PostgREST can auto-detect the embed; if this select fails,
+      // that constraint is the first thing to check.
+      const clubFields = REPORT_COLUMNS.filter((c) => c.source === "club")
+        .map((c) => `"${c.key}"`)
+        .join(",");
+      const selectParam = `${paidFields},memberT(${memberFields},ClubT(${clubFields}))`;
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/PaidT?FKFYID=eq.${CURRENT_FY_ID}&select=${encodeURIComponent(
           selectParam
@@ -98,7 +121,13 @@ export default function MemberPortal() {
       for (const row of data) {
         const { memberT, ...paidRest } = row;
         if (!memberT) continue;
-        const merged = { ...memberT, ...paidRest };
+        const { ClubT, ...memberRest } = memberT;
+        const merged = {
+          ...memberRest,
+          ...paidRest,
+          Club_Name: ClubT?.Club_Name ?? null,
+          WASRAID: toWasraid(memberRest.MEMID),
+        };
         if (!byId.has(merged.MEMID)) {
           byId.set(merged.MEMID, merged);
         }
