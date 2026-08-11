@@ -1,4 +1,5 @@
 import { useState } from "react";
+import associationLogo from "./WASRA-logo-small-300x300.png";
 
 // ---- Fill these in with your Supabase project details ----
 const SUPABASE_URL = "https://ttxtxhqgkgihhscerdgf.supabase.co";
@@ -222,6 +223,13 @@ export default function MemberPortal() {
           height: fit-content;
           margin-top: 60px;
         }
+        .signin-logo {
+          display: block;
+          width: 132px;
+          height: 132px;
+          object-fit: contain;
+          margin: 0 auto 22px;
+        }
         .signin-eyebrow {
           font-family: 'IBM Plex Mono', monospace;
           font-size: 11px;
@@ -301,6 +309,18 @@ export default function MemberPortal() {
           padding-bottom: 20px;
           margin-bottom: 24px;
           border-bottom: 2px solid var(--ink);
+        }
+        .dash-brand {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          min-width: 0;
+        }
+        .dash-logo {
+          width: 64px;
+          height: 64px;
+          object-fit: contain;
+          flex: 0 0 auto;
         }
         .dash-title-group { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
         .dash-title {
@@ -398,10 +418,20 @@ export default function MemberPortal() {
           border-radius: 4px;
           font-size: 13px;
         }
+        @media (max-width: 520px) {
+          .signin-logo { width: 112px; height: 112px; }
+          .dash-logo { width: 52px; height: 52px; }
+          .dash-title { font-size: 23px; }
+        }
       `}</style>
 
       {!session ? (
         <form className="signin-card" onSubmit={handleSignIn}>
+          <img
+            className="signin-logo"
+            src={associationLogo}
+            alt="WA Small Bore Rifle Association logo"
+          />
           <p className="signin-eyebrow">Member Registry</p>
           <h1 className="signin-title">Sign in to view<br />the roster</h1>
 
@@ -434,9 +464,16 @@ export default function MemberPortal() {
       ) : (
         <div className="dash">
           <div className="dash-header">
-            <div className="dash-title-group">
-              <h1 className="dash-title">Current Members</h1>
-              <span className="fy-stamp">{CURRENT_FY_LABEL} · CURRENT</span>
+            <div className="dash-brand">
+              <img
+                className="dash-logo"
+                src={associationLogo}
+                alt="WA Small Bore Rifle Association logo"
+              />
+              <div className="dash-title-group">
+                <h1 className="dash-title">Current Members</h1>
+                <span className="fy-stamp">{CURRENT_FY_LABEL} · CURRENT</span>
+              </div>
             </div>
             <button className="signout-btn" onClick={handleSignOut}>
               Sign out
