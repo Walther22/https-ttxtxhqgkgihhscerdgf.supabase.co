@@ -150,15 +150,27 @@ export default function MemberPortal() {
     setScanStatus(null);
   }
 
+  // Card numbers printed/encoded on membership cards are always the
+  // real MEMID plus this offset.
+  const CARD_NUMBER_OFFSET = 60000;
+
   async function handleScanSubmit(e) {
     e.preventDefault();
     const raw = scanInput.trim();
     setScanInput("");
     if (!raw) return;
 
+    const cardNumber = Number(raw);
+    if (!Number.isFinite(cardNumber)) {
+      setScanStatus({ type: "error", text: `"${raw}" isn't a valid card number.` });
+      scanInputRef.current?.focus();
+      return;
+    }
+    const memId = cardNumber - CARD_NUMBER_OFFSET;
+
     // Already logged for today — don't double up.
-    if (signInLog.some((entry) => String(entry.MEMID) === raw)) {
-      setScanStatus({ type: "warn", text: `Member ${raw} is already signed in today.` });
+    if (signInLog.some((entry) => String(entry.MEMID) === String(memId))) {
+      setScanStatus({ type: "warn", text: `Member ${memId} is already signed in today.` });
       scanInputRef.current?.focus();
       return;
     }
@@ -167,7 +179,7 @@ export default function MemberPortal() {
       const headers = authHeadersFor(session.access_token);
 
       const lookupRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/memberT?MEMID=eq.${raw}&select=${encodeURIComponent(
+        `${SUPABASE_URL}/rest/v1/memberT?MEMID=eq.${memId}&select=${encodeURIComponent(
           `MEMID,"Given Name",Surname`
         )}`,
         { headers }
@@ -176,7 +188,7 @@ export default function MemberPortal() {
       const found = await lookupRes.json();
 
       if (found.length === 0) {
-        setScanStatus({ type: "error", text: `No member found with ID ${raw}.` });
+        setScanStatus({ type: "error", text: `No member found for card ${raw}.` });
         scanInputRef.current?.focus();
         return;
       }
@@ -965,7 +977,7 @@ export default function MemberPortal() {
                   ref={scanInputRef}
                   className="search-input scan-input"
                   type="text"
-                  placeholder="Scan card or type Member ID, then press Enter"
+                  placeholder="Scan card or type card number, then press Enter"
                   value={scanInput}
                   onChange={(e) => setScanInput(e.target.value)}
                   autoFocus
