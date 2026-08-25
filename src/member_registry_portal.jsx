@@ -490,6 +490,28 @@ export default function MemberPortal() {
           outline: 2px solid var(--forest);
           outline-offset: 1px;
         }
+
+        .club-field-wrap {
+          position: relative;
+          display: inline-block;
+        }
+        .club-field-wrap .search-input {
+          padding-right: 30px;
+        }
+        .clear-btn {
+          position: absolute;
+          right: 6px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: var(--ink-muted);
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+          padding: 4px 6px;
+        }
+        .clear-btn:hover { color: var(--ink); }
       `}</style>
 
       {!session ? (
@@ -577,27 +599,42 @@ export default function MemberPortal() {
                   <label className="field-label" htmlFor="club-filter">
                     Club
                   </label>
-                  <input
-                    id="club-filter"
-                    className="search-input"
-                    type="text"
-                    list="club-options"
-                    placeholder="All Clubs"
-                    value={clubQuery}
-                    onChange={(e) => {
-                      const typed = e.target.value;
-                      setClubQuery(typed);
-                      if (typed.trim() === "") {
-                        setSelectedClub("all");
-                        return;
-                      }
-                      const match = clubs.find(
-                        (c) =>
-                          c.Club_Name.toLowerCase() === typed.toLowerCase()
-                      );
-                      setSelectedClub(match ? match["CLUBID"] : "none");
-                    }}
-                  />
+                  <div className="club-field-wrap">
+                    <input
+                      id="club-filter"
+                      className="search-input"
+                      type="text"
+                      list="club-options"
+                      placeholder="All Clubs"
+                      value={clubQuery}
+                      onChange={(e) => {
+                        const typed = e.target.value;
+                        setClubQuery(typed);
+                        if (typed.trim() === "") {
+                          setSelectedClub("all");
+                          return;
+                        }
+                        const match = clubs.find(
+                          (c) =>
+                            c.Club_Name.toLowerCase() === typed.toLowerCase()
+                        );
+                        setSelectedClub(match ? match["CLUBID"] : "none");
+                      }}
+                    />
+                    {clubQuery && (
+                      <button
+                        type="button"
+                        className="clear-btn"
+                        aria-label="Clear club filter"
+                        onClick={() => {
+                          setClubQuery("");
+                          setSelectedClub("all");
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                   <datalist id="club-options">
                     {clubs.map((c) => (
                       <option key={c["CLUBID"]} value={c["Club_Name"]} />
