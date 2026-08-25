@@ -537,7 +537,7 @@ export default function MemberPortal() {
           border-radius: 4px;
           overflow-x: auto;
         }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th {
           text-align: left;
           font-size: 11px;
@@ -547,13 +547,18 @@ export default function MemberPortal() {
           padding: 12px 16px;
           border-bottom: 1.5px solid var(--rule);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         td {
+          text-align: left;
           font-family: 'IBM Plex Mono', monospace;
           font-size: 13.5px;
           padding: 11px 16px;
           border-bottom: 1px solid var(--rule);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         tbody tr:nth-child(odd) { background: rgba(53, 87, 63, 0.035); }
         tbody tr:last-child td { border-bottom: none; }
