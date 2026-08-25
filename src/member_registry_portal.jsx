@@ -15,22 +15,19 @@ const CURRENT_FY_ID = 3;
 const CURRENT_FY_LABEL = "FY26";
 
 // Only these columns are shown, in this order. `source` says which
-// table the field actually lives on. "computed" columns are derived
-// client-side in fetchReport rather than pulled straight from a column.
+// table the field actually lives on. "derived" columns are computed
+// after fetching (not requested directly from the API).
 const REPORT_COLUMNS = [
-  { key: "WASRAID", label: "WASRAID", source: "computed" },
+  { key: "MEMID", label: "Member ID", source: "member" },
   { key: "Given Name", label: "Given Name", source: "member" },
   { key: "Surname", label: "Surname", source: "member" },
-  { key: "Club_Name", label: "Club Name", source: "club" },
+  { key: "ClubName", label: "Club", source: "derived" },
   { key: "EntryDate", label: "Entry Date", source: "paid" },
 ];
 
-// WASRAID = state number "6" + MEMID zero-padded to at least 4 digits.
-// padStart never truncates, so MEMID values of 5+ digits pass through
-// untouched (e.g. 12345 -> "612345") rather than being cut off.
-function toWasraid(memid) {
-  return `6${String(memid).padStart(4, "0")}`;
-}
+// Fetched from memberT but not shown directly — used to look up the
+// club name and to filter the table by the dropdown.
+const CLUB_LINK_FIELD = "Club No";
 
 export default function MemberPortal() {
   const [email, setEmail] = useState("");
@@ -42,7 +39,9 @@ export default function MemberPortal() {
   const [members, setMembers] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+
+  const [clubs, setClubs] = useState([]);
+  const [selectedClub, setSelectedClub] = useState("all");
 
   async function handleSignIn(e) {
     e.preventDefault();
@@ -79,73 +78,65 @@ export default function MemberPortal() {
     try {
       // Column names with spaces (like "Given Name") need to be quoted
       // inside the select param, then the whole thing URL-encoded.
-      // MEMID and "Club No" are always pulled from member (even though
-      // neither is in REPORT_COLUMNS) since WASRAID is computed from
-      // MEMID, MEMID is used to dedupe rows below, and "Club No" is
-      // needed to join against clubT client-side (see note below).
       const memberFields = [
-        `"MEMID"`,
-        `"Club No"`,
         ...REPORT_COLUMNS.filter((c) => c.source === "member").map(
-          (c) => `"${c.key}"`
+          (c) => c.key
         ),
-      ].join(",");
+        CLUB_LINK_FIELD,
+      ]
+        .map((k) => `"${k}"`)
+        .join(",");
       const paidFields = REPORT_COLUMNS.filter((c) => c.source === "paid")
         .map((c) => `"${c.key}"`)
         .join(",");
-      const selectParam = `${paidFields},memberT(${memberFields})`;
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/PaidT?FKFYID=eq.${CURRENT_FY_ID}&select=${encodeURIComponent(
-          selectParam
-        )}`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      // Club No is now a real foreign key from memberT to ClubT, so
+      // Supabase can embed the club name directly — no manual lookup.
+      const selectParam = `${paidFields},memberT(${memberFields},ClubT(Club_Name))`;
+
+      const authHeaders = {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      };
+
+      const [membersRes, clubsRes] = await Promise.all([
+        fetch(
+          `${SUPABASE_URL}/rest/v1/PaidT?FKFYID=eq.${CURRENT_FY_ID}&select=${encodeURIComponent(
+            selectParam
+          )}`,
+          { headers: authHeaders }
+        ),
+        // Fetched separately so the dropdown lists every club, not
+        // just ones with current-FY members.
+        fetch(
+          `${SUPABASE_URL}/rest/v1/ClubT?select=${encodeURIComponent(
+            `"Club No","Club_Name"`
+          )}&order=Club_Name.asc`,
+          { headers: authHeaders }
+        ),
+      ]);
+
+      if (!membersRes.ok) {
+        const data = await membersRes.json().catch(() => ({}));
         throw new Error(data.message || "Could not load the report");
       }
-      const data = await res.json();
+      const data = await membersRes.json();
 
-      // ClubT has no FK constraint linking it to memberT, so PostgREST
-      // can't auto-embed it — we fetch it separately and join by
-      // "Club No" (memberT) -> CLUBID (ClubT) in JS instead.
-      const clubRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/ClubT?select=${encodeURIComponent(
-          `"CLUBID","Club_Name"`
-        )}`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-      if (!clubRes.ok) {
-        const clubData = await clubRes.json().catch(() => ({}));
-        throw new Error(clubData.message || "Could not load club names");
+      if (clubsRes.ok) {
+        setClubs(await clubsRes.json());
       }
-      const clubData = await clubRes.json();
-      const clubNameById = new Map(
-        clubData.map((c) => [c.CLUBID, c.Club_Name])
-      );
 
-      // Each PaidT row carries a nested memberT record. Merge the two,
-      // and dedupe in case a member has more than one payment this FY.
+      // Each PaidT row carries a nested memberT record, which itself
+      // carries a nested ClubT record. Flatten it all together, and
+      // dedupe in case a member has more than one payment this FY.
       const byId = new Map();
       for (const row of data) {
         const { memberT, ...paidRest } = row;
         if (!memberT) continue;
-        const { "Club No": clubNo, ...memberRest } = memberT;
+        const { ClubT: club, ...memberRest } = memberT;
         const merged = {
           ...memberRest,
           ...paidRest,
-          Club_Name: clubNameById.get(clubNo) ?? null,
-          WASRAID: toWasraid(memberRest.MEMID),
+          ClubName: club?.Club_Name || "—",
         };
         if (!byId.has(merged.MEMID)) {
           byId.set(merged.MEMID, merged);
@@ -167,20 +158,17 @@ export default function MemberPortal() {
   function handleSignOut() {
     setSession(null);
     setMembers(null);
+    setClubs([]);
+    setSelectedClub("all");
     setEmail("");
     setPassword("");
-    setSearchQuery("");
   }
 
-  // Case-insensitive substring match against Given Name or Surname.
-  const filteredMembers =
-    members && searchQuery.trim()
-      ? members.filter((m) => {
-          const q = searchQuery.trim().toLowerCase();
-          const given = String(m["Given Name"] ?? "").toLowerCase();
-          const surname = String(m["Surname"] ?? "").toLowerCase();
-          return given.includes(q) || surname.includes(q);
-        })
+  const displayedMembers =
+    members && selectedClub !== "all"
+      ? members.filter(
+          (m) => String(m[CLUB_LINK_FIELD]) === String(selectedClub)
+        )
       : members;
 
   return (
@@ -222,13 +210,6 @@ export default function MemberPortal() {
           max-width: 360px;
           height: fit-content;
           margin-top: 60px;
-        }
-        .signin-logo {
-          display: block;
-          width: 132px;
-          height: 132px;
-          object-fit: contain;
-          margin: 0 auto 22px;
         }
         .signin-eyebrow {
           font-family: 'IBM Plex Mono', monospace;
@@ -310,18 +291,6 @@ export default function MemberPortal() {
           margin-bottom: 24px;
           border-bottom: 2px solid var(--ink);
         }
-        .dash-brand {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          min-width: 0;
-        }
-        .dash-logo {
-          width: 64px;
-          height: 64px;
-          object-fit: contain;
-          flex: 0 0 auto;
-        }
         .dash-title-group { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
         .dash-title {
           font-family: 'Fraunces', serif;
@@ -360,20 +329,26 @@ export default function MemberPortal() {
           margin-bottom: 14px;
         }
 
-        .search-field {
-          width: 100%;
-          max-width: 320px;
-          padding: 9px 12px;
+        .filter-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+        .filter-row .field-label {
+          margin-bottom: 0;
+        }
+        .club-select {
+          padding: 8px 12px;
           border: 1px solid var(--rule);
           border-radius: 3px;
           background: var(--paper-raised);
-          font-family: 'IBM Plex Mono', monospace;
+          font-family: 'IBM Plex Sans', sans-serif;
           font-size: 13.5px;
           color: var(--ink);
-          margin-bottom: 12px;
-          display: block;
+          min-width: 200px;
         }
-        .search-field:focus {
+        .club-select:focus {
           outline: 2px solid var(--forest);
           outline-offset: 1px;
         }
@@ -418,20 +393,10 @@ export default function MemberPortal() {
           border-radius: 4px;
           font-size: 13px;
         }
-        @media (max-width: 520px) {
-          .signin-logo { width: 112px; height: 112px; }
-          .dash-logo { width: 52px; height: 52px; }
-          .dash-title { font-size: 23px; }
-        }
       `}</style>
 
       {!session ? (
         <form className="signin-card" onSubmit={handleSignIn}>
-          <img
-            className="signin-logo"
-            src={associationLogo}
-            alt="WA Small Bore Rifle Association logo"
-          />
           <p className="signin-eyebrow">Member Registry</p>
           <h1 className="signin-title">Sign in to view<br />the roster</h1>
 
@@ -464,16 +429,9 @@ export default function MemberPortal() {
       ) : (
         <div className="dash">
           <div className="dash-header">
-            <div className="dash-brand">
-              <img
-                className="dash-logo"
-                src={associationLogo}
-                alt="WA Small Bore Rifle Association logo"
-              />
-              <div className="dash-title-group">
-                <h1 className="dash-title">Current Members</h1>
-                <span className="fy-stamp">{CURRENT_FY_LABEL} · CURRENT</span>
-              </div>
+            <div className="dash-title-group">
+              <h1 className="dash-title">Current Members</h1>
+              <span className="fy-stamp">{CURRENT_FY_LABEL} · CURRENT</span>
             </div>
             <button className="signout-btn" onClick={handleSignOut}>
               Sign out
@@ -490,28 +448,35 @@ export default function MemberPortal() {
 
           {!reportLoading && !reportError && members && (
             <>
-              <input
-                className="search-field"
-                type="text"
-                placeholder="Search by first name or surname…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <div className="filter-row">
+                <label className="field-label" htmlFor="club-filter">
+                  Club
+                </label>
+                <select
+                  id="club-filter"
+                  className="club-select"
+                  value={selectedClub}
+                  onChange={(e) => setSelectedClub(e.target.value)}
+                >
+                  <option value="all">All Clubs</option>
+                  {clubs.map((c) => (
+                    <option key={c["Club No"]} value={c["Club No"]}>
+                      {c["Club_Name"]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <p className="report-meta">
-                {searchQuery.trim()
-                  ? `${filteredMembers.length} of ${members.length} member${
-                      members.length === 1 ? "" : "s"
-                    } matching "${searchQuery.trim()}"`
-                  : `${members.length} member${
-                      members.length === 1 ? "" : "s"
-                    } on record for ${CURRENT_FY_LABEL}`}
+                {displayedMembers.length} member
+                {displayedMembers.length === 1 ? "" : "s"} on record for{" "}
+                {CURRENT_FY_LABEL}
+                {selectedClub !== "all" ? " in this club" : ""}
               </p>
-              {filteredMembers.length === 0 ? (
+              {displayedMembers.length === 0 ? (
                 <div className="table-wrap">
                   <div className="empty-state">
-                    {members.length === 0
-                      ? "No members are recorded for the current fiscal year yet."
-                      : "No members match that search."}
+                    No members match the current filters.
                   </div>
                 </div>
               ) : (
@@ -525,7 +490,7 @@ export default function MemberPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredMembers.map((row, i) => (
+                      {displayedMembers.map((row, i) => (
                         <tr key={i}>
                           {REPORT_COLUMNS.map((col) => (
                             <td key={col.key}>{String(row[col.key] ?? "—")}</td>
