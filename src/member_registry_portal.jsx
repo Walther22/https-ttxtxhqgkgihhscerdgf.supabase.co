@@ -254,35 +254,33 @@ export default function MemberPortal() {
   async function startCamera() {
     setCameraOn(true);
     setScanStatus(null);
-    setTimeout(async () => {
-      try {
-        const instance = new Html5Qrcode("qr-camera-region");
-        html5QrCodeRef.current = instance;
-        await instance.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 240 },
-          async (decodedText) => {
-            // Ignore rapid repeat callbacks while a scan is being
-            // processed, so the same card doesn't fire twice.
-            if (cameraBusyRef.current) return;
-            cameraBusyRef.current = true;
-            await processScan(decodedText.trim());
-            setTimeout(() => {
-              cameraBusyRef.current = false;
-            }, 1500);
-          },
-          () => {
-            /* ignore per-frame "no QR found" callbacks */
-          }
-        );
-      } catch (err) {
-        setScanStatus({
-          type: "error",
-          text: "Couldn't access the camera. Check permissions and try again.",
-        });
-        setCameraOn(false);
-      }
-    }, 0);
+    try {
+      const instance = new Html5Qrcode("qr-camera-region");
+      html5QrCodeRef.current = instance;
+      await instance.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 240 },
+        async (decodedText) => {
+          // Ignore rapid repeat callbacks while a scan is being
+          // processed, so the same card doesn't fire twice.
+          if (cameraBusyRef.current) return;
+          cameraBusyRef.current = true;
+          await processScan(decodedText.trim());
+          setTimeout(() => {
+            cameraBusyRef.current = false;
+          }, 1500);
+        },
+        () => {
+          /* ignore per-frame "no QR found" callbacks */
+        }
+      );
+    } catch (err) {
+      setScanStatus({
+        type: "error",
+        text: "Couldn't access the camera. Check permissions and try again.",
+      });
+      setCameraOn(false);
+    }
   }
 
   async function stopCamera() {
@@ -796,6 +794,9 @@ export default function MemberPortal() {
           padding: 16px;
           max-width: 420px;
         }
+        .camera-wrap-hidden {
+          display: none;
+        }
         #qr-camera-region {
           width: 100%;
           border-radius: 3px;
@@ -1096,14 +1097,12 @@ export default function MemberPortal() {
                 </button>
               </form>
 
-              {cameraOn && (
-                <div className="camera-wrap">
-                  <div id="qr-camera-region" />
-                  <p className="camera-hint">
-                    Point the camera at the QR code on the membership card.
-                  </p>
-                </div>
-              )}
+              <div className={`camera-wrap ${cameraOn ? "" : "camera-wrap-hidden"}`}>
+                <div id="qr-camera-region" />
+                <p className="camera-hint">
+                  Point the camera at the QR code on the membership card.
+                </p>
+              </div>
 
               {scanStatus && (
                 <div className={`scan-status scan-status-${scanStatus.type}`}>
