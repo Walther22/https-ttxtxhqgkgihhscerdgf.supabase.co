@@ -4,7 +4,6 @@ import associationLogo from "./WASRA-logo-small-300x300.png";
 // ---- Fill these in with your Supabase project details ----
 const SUPABASE_URL = "https://ttxtxhqgkgihhscerdgf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_aL49TtFkyRe0cL3u7cTIuQ_OVYs2qUk";
-// -------------------------------------------------------------
 // This portal calls Supabase's REST + Auth endpoints directly
 // with fetch, so it works with no extra libraries. RLS on the
 // MemberT table (from the "authenticated" policy) is what
@@ -42,6 +41,12 @@ export default function MemberPortal() {
 
   const [clubs, setClubs] = useState([]);
   const [selectedClub, setSelectedClub] = useState("all");
+  const [nameSearch, setNameSearch] = useState("");
+
+  // "landing" = the home screen with tool buttons; "lookup" = the
+  // member report. More views (like practice sign-in) can be added
+  // the same way later.
+  const [view, setView] = useState("landing");
 
   async function handleSignIn(e) {
     e.preventDefault();
@@ -64,11 +69,17 @@ export default function MemberPortal() {
         throw new Error(data.error_description || data.msg || "Sign in failed");
       }
       setSession(data);
-      await fetchReport(data.access_token);
     } catch (err) {
       setAuthError(err.message);
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  function openMemberLookup() {
+    setView("lookup");
+    if (!members && session) {
+      fetchReport(session.access_token);
     }
   }
 
@@ -160,16 +171,26 @@ export default function MemberPortal() {
     setMembers(null);
     setClubs([]);
     setSelectedClub("all");
+    setNameSearch("");
+    setView("landing");
     setEmail("");
     setPassword("");
   }
 
-  const displayedMembers =
-    members && selectedClub !== "all"
-      ? members.filter(
-          (m) => String(m[CLUB_LINK_FIELD]) === String(selectedClub)
-        )
-      : members;
+  const displayedMembers = members
+    ? members.filter((m) => {
+        const matchesClub =
+          selectedClub === "all" ||
+          String(m[CLUB_LINK_FIELD]) === String(selectedClub);
+        const query = nameSearch.trim().toLowerCase();
+        const matchesName =
+          !query ||
+          `${m["Given Name"] || ""} ${m["Surname"] || ""}`
+            .toLowerCase()
+            .includes(query);
+        return matchesClub && matchesName;
+      })
+    : null;
 
   return (
     <div className="portal-root">
@@ -331,12 +352,14 @@ export default function MemberPortal() {
 
         .filter-row {
           display: flex;
-          align-items: center;
-          gap: 10px;
+          align-items: flex-end;
+          gap: 20px;
           margin-bottom: 18px;
+          flex-wrap: wrap;
         }
         .filter-row .field-label {
-          margin-bottom: 0;
+          margin-bottom: 6px;
+          display: block;
         }
         .club-select {
           padding: 8px 12px;
@@ -393,6 +416,88 @@ export default function MemberPortal() {
           border-radius: 4px;
           font-size: 13px;
         }
+
+        .landing {
+          width: 100%;
+          max-width: 640px;
+          margin-top: 30px;
+        }
+        .landing-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 18px;
+        }
+        .landing-title {
+          font-family: 'Fraunces', serif;
+          font-weight: 600;
+          font-size: 30px;
+          margin: 0 0 28px 0;
+        }
+        .tool-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+        .tool-card {
+          text-align: left;
+          background: var(--paper-raised);
+          border: 1px solid var(--rule);
+          border-radius: 4px;
+          padding: 22px 20px;
+          cursor: pointer;
+          font-family: inherit;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .tool-card:hover:not(.tool-card-disabled) {
+          border-color: var(--forest);
+        }
+        .tool-card:focus-visible {
+          outline: 2px solid var(--forest);
+          outline-offset: 2px;
+        }
+        .tool-card-disabled {
+          cursor: default;
+          opacity: 0.55;
+        }
+        .tool-card-title {
+          font-family: 'Fraunces', serif;
+          font-weight: 600;
+          font-size: 18px;
+          color: var(--ink);
+        }
+        .tool-card-desc {
+          font-size: 13px;
+          color: var(--ink-muted);
+        }
+
+        .back-btn {
+          background: none;
+          border: none;
+          color: var(--ink-muted);
+          font-family: 'IBM Plex Sans', sans-serif;
+          font-size: 13px;
+          cursor: pointer;
+          padding: 0;
+        }
+        .back-btn:hover { color: var(--ink); }
+
+        .search-input {
+          padding: 8px 12px;
+          border: 1px solid var(--rule);
+          border-radius: 3px;
+          background: var(--paper-raised);
+          font-family: 'IBM Plex Sans', sans-serif;
+          font-size: 13.5px;
+          color: var(--ink);
+          min-width: 220px;
+        }
+        .search-input:focus {
+          outline: 2px solid var(--forest);
+          outline-offset: 1px;
+        }
       `}</style>
 
       {!session ? (
@@ -426,10 +531,37 @@ export default function MemberPortal() {
 
           {authError && <div className="auth-error">{authError}</div>}
         </form>
+      ) : view === "landing" ? (
+        <div className="landing">
+          <div className="landing-header">
+            <p className="signin-eyebrow">Member Registry</p>
+            <button className="signout-btn" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
+          <h1 className="landing-title">What would you like to do?</h1>
+
+          <div className="tool-grid">
+            <button className="tool-card" onClick={openMemberLookup}>
+              <span className="tool-card-title">Member Lookup</span>
+              <span className="tool-card-desc">
+                Search and filter the current fiscal year roster
+              </span>
+            </button>
+
+            <div className="tool-card tool-card-disabled">
+              <span className="tool-card-title">Practice Sign-In</span>
+              <span className="tool-card-desc">Coming soon</span>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="dash">
           <div className="dash-header">
             <div className="dash-title-group">
+              <button className="back-btn" onClick={() => setView("landing")}>
+                ← Home
+              </button>
               <h1 className="dash-title">Current Members</h1>
               <span className="fy-stamp">{CURRENT_FY_LABEL} · CURRENT</span>
             </div>
@@ -449,22 +581,38 @@ export default function MemberPortal() {
           {!reportLoading && !reportError && members && (
             <>
               <div className="filter-row">
-                <label className="field-label" htmlFor="club-filter">
-                  Club
-                </label>
-                <select
-                  id="club-filter"
-                  className="club-select"
-                  value={selectedClub}
-                  onChange={(e) => setSelectedClub(e.target.value)}
-                >
-                  <option value="all">All Clubs</option>
-                  {clubs.map((c) => (
-                    <option key={c["Club No"]} value={c["Club No"]}>
-                      {c["Club_Name"]}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <label className="field-label" htmlFor="club-filter">
+                    Club
+                  </label>
+                  <select
+                    id="club-filter"
+                    className="club-select"
+                    value={selectedClub}
+                    onChange={(e) => setSelectedClub(e.target.value)}
+                  >
+                    <option value="all">All Clubs</option>
+                    {clubs.map((c) => (
+                      <option key={c["Club No"]} value={c["Club No"]}>
+                        {c["Club_Name"]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="name-search">
+                    Search by name
+                  </label>
+                  <input
+                    id="name-search"
+                    className="search-input"
+                    type="text"
+                    placeholder="Given name or surname…"
+                    value={nameSearch}
+                    onChange={(e) => setNameSearch(e.target.value)}
+                  />
+                </div>
               </div>
 
               <p className="report-meta">
@@ -472,6 +620,7 @@ export default function MemberPortal() {
                 {displayedMembers.length === 1 ? "" : "s"} on record for{" "}
                 {CURRENT_FY_LABEL}
                 {selectedClub !== "all" ? " in this club" : ""}
+                {nameSearch.trim() ? ` matching “${nameSearch.trim()}”` : ""}
               </p>
               {displayedMembers.length === 0 ? (
                 <div className="table-wrap">
