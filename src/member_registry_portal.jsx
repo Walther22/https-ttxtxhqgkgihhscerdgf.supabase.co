@@ -46,9 +46,18 @@ export default function MemberPortal() {
   const [nameSearch, setNameSearch] = useState("");
 
   // "landing" = the home screen with tool buttons; "lookup" = the
-  // member report. More views (like practice sign-in) can be added
-  // the same way later.
+  // member report; "signin" = the practice sign-in scanner.
   const [view, setView] = useState("landing");
+
+  // --- Practice sign-in state ---
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [sessionDate, setSessionDate] = useState(todayISO);
+  const [dateLocked, setDateLocked] = useState(false);
+  const [signInLog, setSignInLog] = useState([]);
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [scanInput, setScanInput] = useState("");
+  const [scanStatus, setScanStatus] = useState(null); // { type: 'ok'|'warn'|'error', text }
+  const scanInputRef = useRef(null);
 
   async function handleSignIn(e) {
     e.preventDefault();
@@ -82,6 +91,143 @@ export default function MemberPortal() {
     setView("lookup");
     if (!members && session) {
       fetchReport(session.access_token);
+    }
+  }
+
+  function openSignIn() {
+    setView("signin");
+    // The sign-in flag needs to know who's a current FY member, so
+    // make sure that roster is loaded even if Member Lookup was
+    // never opened this session.
+    if (!members && session) {
+      fetchReport(session.access_token);
+    }
+  }
+
+  function authHeadersFor(accessToken) {
+    return {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    };
+  }
+
+  async function lockSessionDate() {
+    if (!sessionDate) return;
+    setDateLocked(true);
+    setSignInLoading(true);
+    setScanStatus(null);
+    try {
+      // Load anyone already signed in today, in case this date's
+      // session was started earlier (e.g. reopened after a refresh).
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/SignInT?SessionDate=eq.${sessionDate}&select=${encodeURIComponent(
+          `SignInID,FKMemID,IsCurrentMember,CreatedAt,memberT(MEMID,"Given Name",Surname)`
+        )}&order=CreatedAt.desc`,
+        { headers: authHeadersFor(session.access_token) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setSignInLog(
+          data.map((row) => ({
+            SignInID: row.SignInID,
+            MEMID: row.memberT?.MEMID ?? row.FKMemID,
+            GivenName: row.memberT?.["Given Name"] ?? "",
+            Surname: row.memberT?.Surname ?? "",
+            IsCurrentMember: row.IsCurrentMember,
+            CreatedAt: row.CreatedAt,
+          }))
+        );
+      }
+    } finally {
+      setSignInLoading(false);
+      setTimeout(() => scanInputRef.current?.focus(), 0);
+    }
+  }
+
+  function changeSessionDate() {
+    setDateLocked(false);
+    setSignInLog([]);
+    setScanStatus(null);
+  }
+
+  async function handleScanSubmit(e) {
+    e.preventDefault();
+    const raw = scanInput.trim();
+    setScanInput("");
+    if (!raw) return;
+
+    // Already logged for today — don't double up.
+    if (signInLog.some((entry) => String(entry.MEMID) === raw)) {
+      setScanStatus({ type: "warn", text: `Member ${raw} is already signed in today.` });
+      scanInputRef.current?.focus();
+      return;
+    }
+
+    try {
+      const headers = authHeadersFor(session.access_token);
+
+      const lookupRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/memberT?MEMID=eq.${raw}&select=${encodeURIComponent(
+          `MEMID,"Given Name",Surname`
+        )}`,
+        { headers }
+      );
+      if (!lookupRes.ok) throw new Error("Could not look up that member ID.");
+      const found = await lookupRes.json();
+
+      if (found.length === 0) {
+        setScanStatus({ type: "error", text: `No member found with ID ${raw}.` });
+        scanInputRef.current?.focus();
+        return;
+      }
+
+      const member = found[0];
+      const isCurrent = (members || []).some(
+        (m) => String(m.MEMID) === String(member.MEMID)
+      );
+
+      const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/SignInT`, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          FKMemID: member.MEMID,
+          SessionDate: sessionDate,
+          IsCurrentMember: isCurrent,
+        }),
+      });
+      if (!insertRes.ok) {
+        const errData = await insertRes.json().catch(() => ({}));
+        throw new Error(errData.message || "Could not record the sign-in.");
+      }
+      const [inserted] = await insertRes.json();
+
+      setSignInLog((prev) => [
+        {
+          SignInID: inserted.SignInID,
+          MEMID: member.MEMID,
+          GivenName: member["Given Name"],
+          Surname: member.Surname,
+          IsCurrentMember: isCurrent,
+          CreatedAt: inserted.CreatedAt,
+        },
+        ...prev,
+      ]);
+      setScanStatus(
+        isCurrent
+          ? { type: "ok", text: `Signed in: ${member["Given Name"]} ${member.Surname}` }
+          : {
+              type: "warn",
+              text: `Signed in: ${member["Given Name"]} ${member.Surname} — NOT a current FY member`,
+            }
+      );
+    } catch (err) {
+      setScanStatus({ type: "error", text: err.message });
+    } finally {
+      scanInputRef.current?.focus();
     }
   }
 
@@ -178,6 +324,11 @@ export default function MemberPortal() {
     setView("landing");
     setEmail("");
     setPassword("");
+    setSessionDate(todayISO);
+    setDateLocked(false);
+    setSignInLog([]);
+    setScanInput("");
+    setScanStatus(null);
   }
 
   const displayedMembers = members
@@ -512,6 +663,70 @@ export default function MemberPortal() {
           padding: 4px 6px;
         }
         .clear-btn:hover { color: var(--ink); }
+
+        .date-lock-card {
+          background: var(--paper-raised);
+          border: 1px solid var(--rule);
+          border-radius: 4px;
+          padding: 28px;
+          max-width: 320px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .date-lock-btn { margin-top: 6px; }
+
+        .session-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 18px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid var(--rule);
+        }
+        .session-date-label {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 13px;
+          color: var(--ink-muted);
+        }
+
+        .scan-row { margin-bottom: 14px; }
+        .scan-input {
+          width: 100%;
+          font-size: 16px;
+          padding: 14px 16px;
+        }
+
+        .scan-status {
+          padding: 10px 14px;
+          border-radius: 3px;
+          font-size: 13.5px;
+          margin-bottom: 16px;
+        }
+        .scan-status-ok {
+          background: var(--forest-tint);
+          color: var(--forest);
+        }
+        .scan-status-warn {
+          background: #fbf0dd;
+          color: var(--gold);
+        }
+        .scan-status-error {
+          background: var(--danger-tint);
+          color: var(--danger);
+        }
+
+        tr.row-flagged { background: #fbeaea; }
+        .flag-badge {
+          display: inline-block;
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 11px;
+          letter-spacing: 0.03em;
+          color: var(--danger);
+          border: 1px solid var(--danger);
+          border-radius: 2px;
+          padding: 2px 6px;
+        }
       `}</style>
 
       {!session ? (
@@ -563,13 +778,15 @@ export default function MemberPortal() {
               </span>
             </button>
 
-            <div className="tool-card tool-card-disabled">
+            <button className="tool-card" onClick={openSignIn}>
               <span className="tool-card-title">Practice Sign-In</span>
-              <span className="tool-card-desc">Coming soon</span>
-            </div>
+              <span className="tool-card-desc">
+                Scan or enter member IDs to log today's session
+              </span>
+            </button>
           </div>
         </div>
-      ) : (
+      ) : view === "lookup" ? (
         <div className="dash">
           <div className="dash-header">
             <div className="dash-title-group">
@@ -691,6 +908,141 @@ export default function MemberPortal() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="dash">
+          <div className="dash-header">
+            <div className="dash-title-group">
+              <button className="back-btn" onClick={() => setView("landing")}>
+                ← Home
+              </button>
+              <h1 className="dash-title">Practice Sign-In</h1>
+            </div>
+            <button className="signout-btn" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
+
+          {!dateLocked ? (
+            <form
+              className="date-lock-card"
+              onSubmit={(e) => {
+                e.preventDefault();
+                lockSessionDate();
+              }}
+            >
+              <label className="field-label" htmlFor="session-date">
+                Session date
+              </label>
+              <input
+                id="session-date"
+                className="search-input"
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+                required
+              />
+              <button className="submit-btn date-lock-btn" type="submit">
+                Start session
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="session-bar">
+                <span className="session-date-label">
+                  Session date: <strong>{sessionDate}</strong>
+                </span>
+                <button className="back-btn" onClick={changeSessionDate}>
+                  Change date
+                </button>
+              </div>
+
+              <form className="scan-row" onSubmit={handleScanSubmit}>
+                <input
+                  ref={scanInputRef}
+                  className="search-input scan-input"
+                  type="text"
+                  placeholder="Scan card or type Member ID, then press Enter"
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  autoFocus
+                />
+              </form>
+
+              {scanStatus && (
+                <div className={`scan-status scan-status-${scanStatus.type}`}>
+                  {scanStatus.text}
+                </div>
+              )}
+
+              {signInLoading ? (
+                <div className="loading-state">Loading today's sign-ins…</div>
+              ) : (
+                <>
+                  <p className="report-meta">
+                    {signInLog.length} signed in today
+                    {signInLog.some((e) => !e.IsCurrentMember)
+                      ? ` — ${signInLog.filter((e) => !e.IsCurrentMember).length} not current, needs review`
+                      : ""}
+                  </p>
+                  {signInLog.length === 0 ? (
+                    <div className="table-wrap">
+                      <div className="empty-state">
+                        No one has signed in yet — scan a card to begin.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Member ID</th>
+                            <th>Given Name</th>
+                            <th>Surname</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {signInLog.map((entry) => (
+                            <tr
+                              key={entry.SignInID}
+                              className={
+                                entry.IsCurrentMember ? "" : "row-flagged"
+                              }
+                            >
+                              <td>{entry.MEMID}</td>
+                              <td>{entry.GivenName || "—"}</td>
+                              <td>{entry.Surname || "—"}</td>
+                              <td>
+                                {entry.IsCurrentMember ? (
+                                  "Current"
+                                ) : (
+                                  <span className="flag-badge">
+                                    Review — not current
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {entry.CreatedAt
+                                  ? new Date(
+                                      entry.CreatedAt
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
