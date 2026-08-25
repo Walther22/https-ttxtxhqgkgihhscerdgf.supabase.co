@@ -4,7 +4,6 @@ import associationLogo from "./WASRA-logo-small-300x300.png";
 // ---- Fill these in with your Supabase project details ----
 const SUPABASE_URL = "https://ttxtxhqgkgihhscerdgf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_aL49TtFkyRe0cL3u7cTIuQ_OVYs2qUk";
-// -------------------------------------------------------------
 // This portal calls Supabase's REST + Auth endpoints directly
 // with fetch, so it works with no extra libraries. RLS on the
 // MemberT table (from the "authenticated" policy) is what
@@ -122,7 +121,7 @@ export default function MemberPortal() {
         // just ones with current-FY members.
         fetch(
           `${SUPABASE_URL}/rest/v1/ClubT?select=${encodeURIComponent(
-            `"Club No","Club_Name"`
+            `"ClubID","Club_Name"`
           )}&order=Club_Name.asc`,
           { headers: authHeaders }
         ),
@@ -595,12 +594,12 @@ export default function MemberPortal() {
                         (c) =>
                           c.Club_Name.toLowerCase() === typed.toLowerCase()
                       );
-                      setSelectedClub(match ? match["Club No"] : "none");
+                      setSelectedClub(match ? match["ClubID"] : "none");
                     }}
                   />
                   <datalist id="club-options">
                     {clubs.map((c) => (
-                      <option key={c["Club No"]} value={c["Club_Name"]} />
+                      <option key={c["ClubID"]} value={c["Club_Name"]} />
                     ))}
                   </datalist>
                 </div>
