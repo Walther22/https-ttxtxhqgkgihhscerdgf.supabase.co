@@ -118,12 +118,12 @@ export default function MemberPortal() {
           )}`,
           { headers: authHeaders }
         ),
-        // Fetched separately so the dropdown lists every club, not
-        // just ones with current-FY members.
+        // Fetched separately so the dropdown lists every incorporated
+        // club, not just ones with current-FY members.
         fetch(
           `${SUPABASE_URL}/rest/v1/ClubT?select=${encodeURIComponent(
             `"CLUBID","Club_Name"`
-          )}&order=Club_Name.asc`,
+          )}&Incorporated=eq.true&order=Club_Name.asc`,
           { headers: authHeaders }
         ),
       ]);
