@@ -154,16 +154,15 @@ export default function MemberPortal() {
   // real MEMID plus this offset.
   const CARD_NUMBER_OFFSET = 60000;
 
-  async function handleScanSubmit(e) {
-    e.preventDefault();
-    const raw = scanInput.trim();
-    setScanInput("");
+  // Shared by both the manual/hardware-scanner text field and the
+  // camera scanner. Looks up the card number, records the sign-in,
+  // and updates the on-screen log.
+  async function processScan(raw) {
     if (!raw) return;
 
     const cardNumber = Number(raw);
     if (!Number.isFinite(cardNumber)) {
       setScanStatus({ type: "error", text: `"${raw}" isn't a valid card number.` });
-      scanInputRef.current?.focus();
       return;
     }
     const memId = cardNumber - CARD_NUMBER_OFFSET;
@@ -171,7 +170,6 @@ export default function MemberPortal() {
     // Already logged for today — don't double up.
     if (signInLog.some((entry) => String(entry.MEMID) === String(memId))) {
       setScanStatus({ type: "warn", text: `Member ${memId} is already signed in today.` });
-      scanInputRef.current?.focus();
       return;
     }
 
@@ -189,7 +187,6 @@ export default function MemberPortal() {
 
       if (found.length === 0) {
         setScanStatus({ type: "error", text: `No member found for card ${raw}.` });
-        scanInputRef.current?.focus();
         return;
       }
 
@@ -238,9 +235,68 @@ export default function MemberPortal() {
       );
     } catch (err) {
       setScanStatus({ type: "error", text: err.message });
-    } finally {
-      scanInputRef.current?.focus();
     }
+  }
+
+  async function handleScanSubmit(e) {
+    e.preventDefault();
+    const raw = scanInput.trim();
+    setScanInput("");
+    await processScan(raw);
+    scanInputRef.current?.focus();
+  }
+
+  // --- Camera scanning ---
+  const [cameraOn, setCameraOn] = useState(false);
+  const html5QrCodeRef = useRef(null);
+  const cameraBusyRef = useRef(false);
+
+  async function startCamera() {
+    setCameraOn(true);
+    setScanStatus(null);
+    setTimeout(async () => {
+      try {
+        const instance = new Html5Qrcode("qr-camera-region");
+        html5QrCodeRef.current = instance;
+        await instance.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 240 },
+          async (decodedText) => {
+            // Ignore rapid repeat callbacks while a scan is being
+            // processed, so the same card doesn't fire twice.
+            if (cameraBusyRef.current) return;
+            cameraBusyRef.current = true;
+            await processScan(decodedText.trim());
+            setTimeout(() => {
+              cameraBusyRef.current = false;
+            }, 1500);
+          },
+          () => {
+            /* ignore per-frame "no QR found" callbacks */
+          }
+        );
+      } catch (err) {
+        setScanStatus({
+          type: "error",
+          text: "Couldn't access the camera. Check permissions and try again.",
+        });
+        setCameraOn(false);
+      }
+    }, 0);
+  }
+
+  async function stopCamera() {
+    const instance = html5QrCodeRef.current;
+    if (instance) {
+      try {
+        await instance.stop();
+        instance.clear();
+      } catch {
+        // camera may already be stopped — safe to ignore
+      }
+      html5QrCodeRef.current = null;
+    }
+    setCameraOn(false);
   }
 
   async function fetchReport(accessToken) {
@@ -327,6 +383,7 @@ export default function MemberPortal() {
   }
 
   function handleSignOut() {
+    if (cameraOn) stopCamera();
     setSession(null);
     setMembers(null);
     setClubs([]);
@@ -707,11 +764,48 @@ export default function MemberPortal() {
           color: var(--ink-muted);
         }
 
-        .scan-row { margin-bottom: 14px; }
+        .scan-row {
+          margin-bottom: 14px;
+          display: flex;
+          gap: 10px;
+          align-items: stretch;
+        }
         .scan-input {
-          width: 100%;
+          flex: 1;
           font-size: 16px;
           padding: 14px 16px;
+        }
+        .camera-toggle-btn {
+          background: var(--paper-raised);
+          border: 1px solid var(--rule);
+          border-radius: 3px;
+          padding: 0 16px;
+          font-family: 'IBM Plex Sans', sans-serif;
+          font-size: 13.5px;
+          color: var(--ink);
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .camera-toggle-btn:hover { border-color: var(--forest); }
+
+        .camera-wrap {
+          margin-bottom: 16px;
+          background: var(--paper-raised);
+          border: 1px solid var(--rule);
+          border-radius: 4px;
+          padding: 16px;
+          max-width: 420px;
+        }
+        #qr-camera-region {
+          width: 100%;
+          border-radius: 3px;
+          overflow: hidden;
+        }
+        .camera-hint {
+          margin: 10px 0 0 0;
+          font-size: 12px;
+          color: var(--ink-muted);
+          text-align: center;
         }
 
         .scan-status {
@@ -933,7 +1027,13 @@ export default function MemberPortal() {
         <div className="dash">
           <div className="dash-header">
             <div className="dash-title-group">
-              <button className="back-btn" onClick={() => setView("landing")}>
+              <button
+                className="back-btn"
+                onClick={() => {
+                  if (cameraOn) stopCamera();
+                  setView("landing");
+                }}
+              >
                 ← Home
               </button>
               <h1 className="dash-title">Practice Sign-In</h1>
@@ -987,7 +1087,23 @@ export default function MemberPortal() {
                   onChange={(e) => setScanInput(e.target.value)}
                   autoFocus
                 />
+                <button
+                  type="button"
+                  className="camera-toggle-btn"
+                  onClick={cameraOn ? stopCamera : startCamera}
+                >
+                  {cameraOn ? "Stop Camera" : "Use Camera Instead"}
+                </button>
               </form>
+
+              {cameraOn && (
+                <div className="camera-wrap">
+                  <div id="qr-camera-region" />
+                  <p className="camera-hint">
+                    Point the camera at the QR code on the membership card.
+                  </p>
+                </div>
+              )}
 
               {scanStatus && (
                 <div className={`scan-status scan-status-${scanStatus.type}`}>
