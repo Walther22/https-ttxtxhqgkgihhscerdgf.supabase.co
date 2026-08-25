@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import associationLogo from "./WASRA-logo-small-300x300.png";
 
 // ---- Fill these in with your Supabase project details ----
