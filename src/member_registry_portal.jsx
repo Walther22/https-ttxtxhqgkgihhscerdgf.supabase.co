@@ -259,9 +259,13 @@ export default function MemberPortal() {
     try {
       const instance = new Html5Qrcode("qr-camera-region");
       html5QrCodeRef.current = instance;
-      await instance.start(
-        { facingMode: {ideal: "environment" }},
-        { fps: 10, qrbox: 240 },
+  const cameras = await Html5Qrcode.getCameras();
+
+alert(`Found ${cameras.length} camera(s)`);
+
+await instance.start(
+  cameras[0].id,
+  { fps: 10, qrbox: 240 },
         async (decodedText) => {
           // Ignore rapid repeat callbacks while a scan is being
           // processed, so the same card doesn't fire twice.
