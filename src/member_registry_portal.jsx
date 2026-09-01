@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import associationLogo from "./WASRA-logo-small-300x300.png";
+import { Html5Qrcode } from "html5-qrcode";
 
 // ---- Fill these in with your Supabase project details ----
 const SUPABASE_URL = "https://ttxtxhqgkgihhscerdgf.supabase.co";
