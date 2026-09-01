@@ -260,7 +260,7 @@ export default function MemberPortal() {
       const instance = new Html5Qrcode("qr-camera-region");
       html5QrCodeRef.current = instance;
       await instance.start(
-        { facingMode: "environment" },
+        { facingMode: {ideal: "environment" },
         { fps: 10, qrbox: 240 },
         async (decodedText) => {
           // Ignore rapid repeat callbacks while a scan is being
