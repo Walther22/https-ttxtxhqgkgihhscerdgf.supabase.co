@@ -274,13 +274,16 @@ export default function MemberPortal() {
           /* ignore per-frame "no QR found" callbacks */
         }
       );
-    } catch (err) {
-      setScanStatus({
-        type: "error",
-        text: "Couldn't access the camera. Check permissions and try again.",
-      });
-      setCameraOn(false);
-    }
+} catch (err) {
+  console.error("CAMERA ERROR:", err);
+
+  setScanStatus({
+    type: "error",
+    text: err?.message || String(err),
+  });
+
+  setCameraOn(false);
+}
   }
 
   async function stopCamera() {
