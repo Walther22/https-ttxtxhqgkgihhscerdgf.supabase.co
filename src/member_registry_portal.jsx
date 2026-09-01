@@ -259,13 +259,16 @@ export default function MemberPortal() {
     try {
       const instance = new Html5Qrcode("qr-camera-region");
       html5QrCodeRef.current = instance;
-  const cameras = await Html5Qrcode.getCameras();
 
-alert(`Found ${cameras.length} camera(s)`);
-
-await instance.start(
-  cameras[0].id,
-  { fps: 10, qrbox: 240 },
+      // Don't call Html5Qrcode.getCameras() on iOS Safari — until camera
+      // permission is actually granted it can return a device with a
+      // missing/malformed `id`, and passing that into start() is what
+      // triggers the "facingMode should be string or object with exact
+      // as key" error. A facingMode constraint skips enumeration
+      // entirely and works reliably on iOS/Android/desktop.
+      await instance.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 240 },
         async (decodedText) => {
           // Ignore rapid repeat callbacks while a scan is being
           // processed, so the same card doesn't fire twice.
@@ -280,16 +283,16 @@ await instance.start(
           /* ignore per-frame "no QR found" callbacks */
         }
       );
-} catch (err) {
-  console.error("CAMERA ERROR:", err);
+    } catch (err) {
+      console.error("CAMERA ERROR:", err);
 
-  setScanStatus({
-    type: "error",
-    text: err?.message || String(err),
-  });
+      setScanStatus({
+        type: "error",
+        text: err?.message || String(err),
+      });
 
-  setCameraOn(false);
-}
+      setCameraOn(false);
+    }
   }
 
   async function stopCamera() {
