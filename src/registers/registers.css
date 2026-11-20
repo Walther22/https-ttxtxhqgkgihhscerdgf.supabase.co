@@ -1,0 +1,29 @@
+/* Styles for the lockers, keys and venue issue screens.
+   They sit inside .portal-root so they use the portal's colour variables. */
+.portal-root .reg-wrap { width: 100%; max-width: 900px; }
+.portal-root .reg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.portal-root .reg-stat { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px; padding: 12px; text-align: center; }
+.portal-root .reg-stat b { display: block; font-family: 'Fraunces', serif; font-size: 24px; }
+.portal-root .reg-stat span { font-size: 11px; letter-spacing: .06em; color: var(--ink-muted); }
+.portal-root .reg-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.portal-root .reg-btn { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 3px; padding: 9px 14px; font-family: 'IBM Plex Sans', sans-serif; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.portal-root .reg-btn:hover { border-color: var(--forest); }
+.portal-root .reg-btn.on { background: var(--ink); color: var(--paper-raised); border-color: var(--ink); }
+.portal-root .reg-btn.primary { background: var(--ink); color: var(--paper-raised); border-color: var(--ink); font-weight: 600; }
+.portal-root .reg-btn.danger { color: var(--danger); border-color: var(--danger); }
+.portal-root .reg-btn:disabled { opacity: .55; cursor: default; }
+.portal-root .reg-panel { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; margin: 6px 0 14px; max-width: 520px; }
+.portal-root .reg-item { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px; padding: 14px 16px; margin-bottom: 10px; }
+.portal-root .reg-item-row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.portal-root .reg-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; }
+.portal-root .reg-meta { font-size: 12.5px; color: var(--ink-muted); margin-top: 3px; }
+.portal-root .reg-tag { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .04em; border: 1px solid var(--rule); border-radius: 3px; padding: 3px 7px; white-space: nowrap; height: fit-content; }
+.portal-root .reg-tag.good { color: var(--forest); border-color: var(--forest); }
+.portal-root .reg-tag.warn { color: var(--gold); border-color: var(--gold); }
+.portal-root .reg-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.portal-root .reg-photo { max-width: 100%; max-height: 280px; border-radius: 4px; margin-top: 10px; border: 1px solid var(--rule); }
+.portal-root .reg-hint { font-size: 12.5px; color: var(--ink-muted); margin: 0 0 14px; }
+.portal-root .reg-access-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.portal-root .reg-access-grid .field { margin-bottom: 0; }
+.portal-root textarea.field { font-family: 'IBM Plex Sans', sans-serif; resize: vertical; }
+@media (max-width: 520px) { .portal-root .reg-access-grid { grid-template-columns: 1fr; } }

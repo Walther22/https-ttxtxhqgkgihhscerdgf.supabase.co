@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import associationLogo from "./WASRA-logo-small-300x300.png";
+import RegistersApp from "./registers/RegistersApp";
+import { createApi, loadRegisterAccess } from "./registers/api";
 
 
 // ---- Fill these in with your Supabase project details ----
@@ -51,6 +53,14 @@ export default function MemberPortal() {
   // member report; "signin" = the practice sign-in scanner.
   const [view, setView] = useState("landing");
 
+  // What this person may do in the lockers, keys and venue issue screens.
+  const [registerAccess, setRegisterAccess] = useState({
+    lockers: "none",
+    keys: "none",
+    issues: "none",
+    admin: false,
+  });
+
   // --- Practice sign-in state ---
   const todayISO = new Date().toISOString().slice(0, 10);
   const [sessionDate, setSessionDate] = useState(todayISO);
@@ -82,6 +92,9 @@ export default function MemberPortal() {
         throw new Error(data.error_description || data.msg || "Sign in failed");
       }
       setSession(data);
+      loadRegisterAccess(createApi(SUPABASE_URL, SUPABASE_ANON_KEY, data.access_token))
+        .then(setRegisterAccess)
+        .catch(() => {});
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -395,6 +408,7 @@ export default function MemberPortal() {
   function handleSignOut() {
     if (cameraOn) stopCamera();
     setSession(null);
+    setRegisterAccess({ lockers: "none", keys: "none", issues: "none", admin: false });
     setMembers(null);
     setClubs([]);
     setSelectedClub("all");
@@ -908,6 +922,38 @@ export default function MemberPortal() {
                 Scan or enter member IDs to log today's session
               </span>
             </button>
+
+            {registerAccess.lockers !== "none" && (
+              <button className="tool-card" onClick={() => setView("reg-lockers")}>
+                <span className="tool-card-title">Lockers</span>
+                <span className="tool-card-desc">Who holds which locker</span>
+              </button>
+            )}
+
+            {registerAccess.keys !== "none" && (
+              <button className="tool-card" onClick={() => setView("reg-keys")}>
+                <span className="tool-card-title">Keys</span>
+                <span className="tool-card-desc">Keys issued and returned</span>
+              </button>
+            )}
+
+            {registerAccess.issues !== "none" && (
+              <button className="tool-card" onClick={() => setView("reg-issues")}>
+                <span className="tool-card-title">Venue Issues</span>
+                <span className="tool-card-desc">
+                  Report faults at the venue, with a photo
+                </span>
+              </button>
+            )}
+
+            {registerAccess.admin && (
+              <button className="tool-card" onClick={() => setView("reg-access")}>
+                <span className="tool-card-title">Register Access</span>
+                <span className="tool-card-desc">
+                  Choose who can use lockers, keys and venue issues
+                </span>
+              </button>
+            )}
           </div>
         </div>
       ) : view === "lookup" ? (
@@ -1036,6 +1082,16 @@ export default function MemberPortal() {
             </>
           )}
         </div>
+      ) : view.startsWith("reg-") ? (
+        <RegistersApp
+          view={view}
+          session={session}
+          supabaseUrl={SUPABASE_URL}
+          anonKey={SUPABASE_ANON_KEY}
+          access={registerAccess}
+          onHome={() => setView("landing")}
+          onSignOut={handleSignOut}
+        />
       ) : (
         <div className="dash">
           <div className="dash-header">
