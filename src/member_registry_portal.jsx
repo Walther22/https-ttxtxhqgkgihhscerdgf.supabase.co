@@ -39,6 +39,11 @@ export default function MemberPortal() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState("signin"); // "signin" | "forgot"
+  const [authNotice, setAuthNotice] = useState("");
+  const [recovery, setRecovery] = useState(null); // set when an invite or reset link is opened
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [members, setMembers] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -70,6 +75,96 @@ export default function MemberPortal() {
   const [scanInput, setScanInput] = useState("");
   const [scanStatus, setScanStatus] = useState(null); // { type: 'ok'|'warn'|'error', text }
   const scanInputRef = useRef(null);
+
+  // Invite and reset links open the portal with tokens in the address after "#".
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const token = params.get("access_token");
+    const type = params.get("type");
+    if (token && ["recovery", "invite", "signup", "magiclink"].includes(type)) {
+      setRecovery({ token, refresh: params.get("refresh_token"), type });
+    } else if (params.get("error")) {
+      setAuthError(
+        params.get("error_code") === "otp_expired"
+          ? "That link has expired or was already used. Choose Forgot password to get a new one."
+          : (params.get("error_description") || "That link is not valid.").replace(/\+/g, " ")
+      );
+    } else {
+      return;
+    }
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
+
+  async function handleForgot(e) {
+    e.preventDefault();
+    setAuthError("");
+    setAuthNotice("");
+    setAuthLoading(true);
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(window.location.origin)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+          body: JSON.stringify({ email: email.trim() }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          res.status === 429
+            ? "Too many requests. Wait a few minutes and try again."
+            : data.msg || data.error_description || "Could not send the email."
+        );
+      }
+      setAuthNotice("If that email has a login, a link to set a new password is on its way. Check your inbox.");
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSetPassword(e) {
+    e.preventDefault();
+    setAuthError("");
+    if (newPassword.length < 8) return setAuthError("Use at least 8 characters.");
+    if (newPassword !== confirmPassword) return setAuthError("The two passwords do not match.");
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${recovery.token}`,
+        },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          /expired|invalid|jwt/i.test(String(data.msg || data.message || ""))
+            ? "That link has expired. Go back and choose Forgot password to get a new one."
+            : data.msg || data.message || "Could not set the password."
+        );
+      }
+      const newSession = { access_token: recovery.token, refresh_token: recovery.refresh };
+      setSession(newSession);
+      setRecovery(null);
+      setNewPassword("");
+      setConfirmPassword("");
+      loadRegisterAccess(createApi(SUPABASE_URL, SUPABASE_ANON_KEY, newSession.access_token))
+        .then(setRegisterAccess)
+        .catch(() => {});
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
 
   async function handleSignIn(e) {
     e.preventDefault();
@@ -543,6 +638,27 @@ export default function MemberPortal() {
           outline: 2px solid var(--forest);
           outline-offset: 2px;
         }
+        .auth-notice {
+          margin-top: 14px;
+          padding: 10px 12px;
+          background: var(--forest-tint);
+          color: var(--ink);
+          border-radius: 3px;
+          font-size: 13px;
+        }
+        .link-btn {
+          display: block;
+          margin: 16px auto 0;
+          background: none;
+          border: 0;
+          padding: 4px;
+          font-family: 'IBM Plex Sans', sans-serif;
+          font-size: 13px;
+          color: var(--ink-muted);
+          text-decoration: underline;
+          cursor: pointer;
+        }
+        .link-btn:hover { color: var(--ink); }
         .auth-error {
           margin-top: 14px;
           padding: 10px 12px;
@@ -872,7 +988,88 @@ export default function MemberPortal() {
         }
       `}</style>
 
-      {!session ? (
+      {!session && recovery ? (
+        <form className="signin-card" onSubmit={handleSetPassword}>
+          <img className="logo-login" src={associationLogo} alt="WA Small Bore Rifle Association" />
+          <p className="signin-eyebrow">Member Registry</p>
+          <h1 className="signin-title">{recovery.type === "recovery" ? "Set a new password" : "Choose your password"}</h1>
+
+          <label className="field-label" htmlFor="newpw">New password</label>
+          <input
+            id="newpw"
+            className="field"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+
+          <label className="field-label" htmlFor="confirmpw">Confirm password</label>
+          <input
+            id="confirmpw"
+            className="field"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+
+          <button className="submit-btn" type="submit" disabled={authLoading}>
+            {authLoading ? "Saving…" : "Save password and sign in"}
+          </button>
+
+          {authError && <div className="auth-error">{authError}</div>}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setRecovery(null);
+              setAuthError("");
+              setAuthMode("forgot");
+            }}
+          >
+            Link not working? Get a new one
+          </button>
+        </form>
+      ) : !session && authMode === "forgot" ? (
+        <form className="signin-card" onSubmit={handleForgot}>
+          <img className="logo-login" src={associationLogo} alt="WA Small Bore Rifle Association" />
+          <p className="signin-eyebrow">Member Registry</p>
+          <h1 className="signin-title">Reset your<br />password</h1>
+
+          <label className="field-label" htmlFor="forgot-email">Email</label>
+          <input
+            id="forgot-email"
+            className="field"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <button className="submit-btn" type="submit" disabled={authLoading}>
+            {authLoading ? "Sending…" : "Email me a reset link"}
+          </button>
+
+          {authNotice && <div className="auth-notice">{authNotice}</div>}
+          {authError && <div className="auth-error">{authError}</div>}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setAuthMode("signin");
+              setAuthError("");
+              setAuthNotice("");
+            }}
+          >
+            Back to sign in
+          </button>
+        </form>
+      ) : !session ? (
         <form className="signin-card" onSubmit={handleSignIn}>
           <img className="logo-login" src={associationLogo} alt="WA Small Bore Rifle Association" />
           <p className="signin-eyebrow">Member Registry</p>
@@ -903,6 +1100,16 @@ export default function MemberPortal() {
           </button>
 
           {authError && <div className="auth-error">{authError}</div>}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setAuthMode("forgot");
+              setAuthError("");
+            }}
+          >
+            Forgot password?
+          </button>
         </form>
       ) : view === "landing" ? (
         <div className="landing">
