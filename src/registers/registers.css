@@ -1,6 +1,6 @@
 /* Styles for the lockers, keys and venue issue screens.
    They sit inside .portal-root so they use the portal's colour variables. */
-.portal-root .reg-wrap { width: 100%; max-width: 900px; }
+.portal-root .reg-wrap { width: 100%; max-width: 900px; text-align: left; }
 .portal-root .reg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
 .portal-root .reg-stat { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px; padding: 12px; text-align: center; }
 .portal-root .reg-stat b { display: block; font-family: 'Fraunces', serif; font-size: 24px; }

@@ -109,3 +109,13 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Off-yellow page background (member portal theme) */
+html,
+body,
+#root {
+  background: #f3ecc8 !important;
+}
+#root {
+  border-inline: 0;
+}

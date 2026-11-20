@@ -450,16 +450,16 @@ export default function MemberPortal() {
       />
       <style>{`
         .portal-root {
-          --paper: #f6f3ec;
-          --paper-raised: #fffdf8;
-          --ink: #1e2a38;
-          --ink-muted: #5b6b7a;
-          --rule: #d8d2c4;
-          --forest: #35573f;
-          --forest-tint: #e7ede8;
-          --gold: #96731a;
-          --danger: #8b3a3a;
-          --danger-tint: #f3e6e6;
+          --paper: #f3ecc8;
+          --paper-raised: #fbf7e2;
+          --ink: #14130f;
+          --ink-muted: #6b6648;
+          --rule: #d8cf9f;
+          --forest: #14130f;
+          --forest-tint: #ece3a8;
+          --gold: #7a5a00;
+          --danger: #9a2f22;
+          --danger-tint: #f9e0d3;
           font-family: 'IBM Plex Sans', sans-serif;
           color: var(--ink);
           background: var(--paper);
@@ -482,6 +482,10 @@ export default function MemberPortal() {
           height: fit-content;
           margin-top: 60px;
         }
+        .logo-login { display: block; width: 84px; height: 84px; margin: 0 auto 18px; }
+        .logo-small { width: 44px; height: 44px; flex: none; align-self: center; }
+        .logo-row { display: flex; align-items: center; gap: 12px; }
+        .logo-row .signin-eyebrow { margin: 0; }
         .signin-eyebrow {
           font-family: 'IBM Plex Mono', monospace;
           font-size: 11px;
@@ -641,7 +645,7 @@ export default function MemberPortal() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        tbody tr:nth-child(odd) { background: rgba(53, 87, 63, 0.035); }
+        tbody tr:nth-child(odd) { background: rgba(20, 19, 15, 0.045); }
         tbody tr:last-child td { border-bottom: none; }
 
         .empty-state, .loading-state {
@@ -694,6 +698,7 @@ export default function MemberPortal() {
         }
         .tool-card:hover:not(.tool-card-disabled) {
           border-color: var(--forest);
+          background: #f6edb9;
         }
         .tool-card:focus-visible {
           outline: 2px solid var(--forest);
@@ -846,7 +851,7 @@ export default function MemberPortal() {
           color: var(--forest);
         }
         .scan-status-warn {
-          background: #fbf0dd;
+          background: #f6e7a8;
           color: var(--gold);
         }
         .scan-status-error {
@@ -854,7 +859,7 @@ export default function MemberPortal() {
           color: var(--danger);
         }
 
-        tr.row-flagged { background: #fbeaea; }
+        tr.row-flagged { background: #f9e0d3; }
         .flag-badge {
           display: inline-block;
           font-family: 'IBM Plex Mono', monospace;
@@ -869,6 +874,7 @@ export default function MemberPortal() {
 
       {!session ? (
         <form className="signin-card" onSubmit={handleSignIn}>
+          <img className="logo-login" src={associationLogo} alt="WA Small Bore Rifle Association" />
           <p className="signin-eyebrow">Member Registry</p>
           <h1 className="signin-title">Sign in to view<br />the roster</h1>
 
@@ -901,7 +907,10 @@ export default function MemberPortal() {
       ) : view === "landing" ? (
         <div className="landing">
           <div className="landing-header">
-            <p className="signin-eyebrow">Member Registry</p>
+            <div className="logo-row">
+              <img className="logo-small" src={associationLogo} alt="WA Small Bore Rifle Association" />
+              <p className="signin-eyebrow">Member Registry</p>
+            </div>
             <button className="signout-btn" onClick={handleSignOut}>
               Sign out
             </button>
@@ -960,6 +969,7 @@ export default function MemberPortal() {
         <div className="dash">
           <div className="dash-header">
             <div className="dash-title-group">
+              <img className="logo-small" src={associationLogo} alt="WA Small Bore Rifle Association" />
               <button className="back-btn" onClick={() => setView("landing")}>
                 ← Home
               </button>
@@ -1096,6 +1106,7 @@ export default function MemberPortal() {
         <div className="dash">
           <div className="dash-header">
             <div className="dash-title-group">
+              <img className="logo-small" src={associationLogo} alt="WA Small Bore Rifle Association" />
               <button
                 className="back-btn"
                 onClick={() => {

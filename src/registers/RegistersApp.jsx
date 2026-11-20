@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createApi, formatDate, todayLocal } from "./api";
+import associationLogo from "../WASRA-logo-small-300x300.png";
 import "./registers.css";
 
 const CONFIG = {
@@ -44,6 +45,7 @@ function Header({ title, onHome, onSignOut }) {
   return (
     <div className="dash-header">
       <div className="dash-title-group">
+        <img className="logo-small" src={associationLogo} alt="WA Small Bore Rifle Association" />
         <button className="back-btn" onClick={onHome}>
           ← Home
         </button>
