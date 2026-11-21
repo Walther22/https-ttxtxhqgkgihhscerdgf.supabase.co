@@ -567,7 +567,8 @@ async function shrinkImage(file, maxEdge = 1600, quality = 0.8) {
 }
 
 function IssuesScreen({ api, level, onHome, onSignOut }) {
-  const canEdit = level === "edit";
+  const canReport = level === "report" || level === "edit"; // can enter a new issue
+  const canAction = level === "edit"; // can change status / resolve
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("active");
   const [showForm, setShowForm] = useState(false);
@@ -683,7 +684,10 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
         <div className="loading-state">Loading…</div>
       ) : (
         <>
-          {!canEdit && <p className="reg-hint">View only. You cannot report or update issues.</p>}
+          {level === "view" && <p className="reg-hint">View only. You cannot report or update issues.</p>}
+          {level === "report" && (
+            <p className="reg-hint">You can report an issue. You will see the issues you have reported here.</p>
+          )}
           <Notice message={message} error={error} />
 
           <div className="reg-toolbar">
@@ -701,14 +705,14 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
                 {label}
               </button>
             ))}
-            {canEdit && (
+            {canReport && (
               <button type="button" className="reg-btn primary" onClick={() => setShowForm((v) => !v)}>
                 {showForm ? "Cancel" : "Report issue"}
               </button>
             )}
           </div>
 
-          {canEdit && showForm && (
+          {canReport && showForm && (
             <form className="reg-panel" onSubmit={submit}>
               <label className="field-label">What is the issue?</label>
               <input
@@ -800,7 +804,7 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
                   {issue.resolution_notes ? ` · ${issue.resolution_notes}` : ""}
                 </div>
               )}
-              {canEdit && issue.status !== "resolved" && (
+              {canAction && issue.status !== "resolved" && (
                 <div className="reg-actions">
                   {issue.status === "open" && (
                     <button
@@ -829,7 +833,7 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
                   </button>
                 </div>
               )}
-              {canEdit && issue.status === "resolved" && (
+              {canAction && issue.status === "resolved" && (
                 <div className="reg-actions">
                   <button type="button" className="reg-btn" disabled={busy} onClick={() => setStatus(issue, "open")}>
                     Reopen
@@ -863,6 +867,7 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
   const [fullName, setFullName] = useState("");
   const [club, setClub] = useState("");
   const [position, setPosition] = useState(POSITIONS[0]);
+  const [canAction, setCanAction] = useState(false);
 
   const [clubLogins, setClubLogins] = useState([]);
   const [clubList, setClubList] = useState([]);
@@ -970,7 +975,7 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
         p_position: position,
         p_lockers: officer ? "edit" : "none",
         p_keys: officer ? "edit" : "none",
-        p_issues: "edit",
+        p_issues: canAction ? "edit" : "report",
       });
       if (!result || result.outcome !== "saved") {
         throw new Error((result && result.message) || "Unable to add the person.");
@@ -979,6 +984,7 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
       setEmail("");
       setFullName("");
       setClub("");
+      setCanAction(false);
       setShowAdd(false);
       await load();
     } catch (err) {
@@ -1022,9 +1028,13 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
                   <option key={p}>{p}</option>
                 ))}
               </select>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0 10px" }}>
+                <input type="checkbox" checked={canAction} onChange={(e) => setCanAction(e.target.checked)} />
+                <span>Can action notifications (mark in progress or resolved)</span>
+              </label>
               <p className="reg-hint">
-                President and Treasurer get edit access to lockers, keys and notifications. A nominated contact
-                gets notifications only.
+                President and Treasurer get edit access to lockers and keys. Everyone can report a notification.
+                Only people with the box ticked can action them.
               </p>
               <button className="submit-btn" disabled={busyKey === "add"} type="submit">
                 Save person
@@ -1053,8 +1063,9 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
                         onChange={(e) => change(row, area.key, e.target.value)}
                       >
                         <option value="none">No access</option>
-                        <option value="view">View</option>
-                        <option value="edit">Edit</option>
+                        {area.key === "issues" && <option value="report">Report only</option>}
+                        <option value="view">{area.key === "issues" ? "View all" : "View"}</option>
+                        <option value="edit">{area.key === "issues" ? "Can action" : "Edit"}</option>
                       </select>
                     </div>
                   ))}
@@ -1067,7 +1078,7 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
             <>
               <h2 className="reg-name" style={{ margin: "28px 0 4px" }}>Club logins</h2>
               <p className="reg-hint">
-                A club login can open Member Lookup (only the members of its own club) and can report Notifications.
+                A club login can open Member Lookup (only the members of its own club) and report Notifications.
                 Nothing else. The person needs a login first (Supabase, Authentication, Users).
               </p>
               <form className="reg-panel" onSubmit={saveClubLogin}>

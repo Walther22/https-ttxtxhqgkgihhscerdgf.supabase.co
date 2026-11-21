@@ -95,7 +95,7 @@ export async function loadRegisterAccess(api) {
     ...AREAS.map(async (area) => {
       try {
         const level = await api.rpc("register_access_level", { p_register: area });
-        result[area] = level === "view" || level === "edit" ? level : "none";
+        result[area] = ["report", "view", "edit"].includes(level) ? level : "none";
       } catch {
         result[area] = "none";
       }
