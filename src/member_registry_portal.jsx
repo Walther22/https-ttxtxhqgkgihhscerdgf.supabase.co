@@ -104,7 +104,7 @@ export default function MemberPortal() {
     setAuthLoading(true);
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(window.location.origin)}`,
+        `${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(`${window.location.origin}/`)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
