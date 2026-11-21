@@ -675,10 +675,10 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
 
   return (
     <div className="reg-wrap">
-      <Header title="Venue Issues" onHome={onHome} onSignOut={onSignOut} />
+      <Header title="Notifications" onHome={onHome} onSignOut={onSignOut} />
 
       {level === "none" ? (
-        <NoAccess what="venue issues" />
+        <NoAccess what="notifications" />
       ) : rows === null ? (
         <div className="loading-state">Loading…</div>
       ) : (
@@ -850,7 +850,7 @@ function IssuesScreen({ api, level, onHome, onSignOut }) {
 const ACCESS_AREAS = [
   { key: "lockers", column: "lockers_access", label: "Lockers" },
   { key: "keys", column: "keys_access", label: "Keys" },
-  { key: "issues", column: "issues_access", label: "Issues" },
+  { key: "issues", column: "issues_access", label: "Notifications" },
 ];
 
 function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
@@ -864,6 +864,11 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
   const [club, setClub] = useState("");
   const [position, setPosition] = useState(POSITIONS[0]);
 
+  const [clubLogins, setClubLogins] = useState([]);
+  const [clubList, setClubList] = useState([]);
+  const [clubEmail, setClubEmail] = useState("");
+  const [clubNo, setClubNo] = useState("");
+
   const load = useCallback(async () => {
     try {
       setRows((await api.rpc("list_register_people")) || []);
@@ -873,9 +878,57 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
     }
   }, [api]);
 
+  const loadClubLogins = useCallback(async () => {
+    try {
+      setClubLogins((await api.rpc("list_club_logins")) || []);
+      setClubList((await api.select('ClubT?select=CLUBID,Club_Name&Incorporated=eq.true&order=Club_Name.asc')) || []);
+    } catch {
+      // The club login tools are added by 013_club_logins.sql; hide the section until it has been run.
+      setClubLogins(null);
+    }
+  }, [api]);
+
   useEffect(() => {
-    if (isAdmin) load();
-  }, [isAdmin, load]);
+    if (isAdmin) {
+      load();
+      loadClubLogins();
+    }
+  }, [isAdmin, load, loadClubLogins]);
+
+  async function saveClubLogin(e) {
+    e.preventDefault();
+    setMessage("");
+    setError("");
+    if (!clubEmail.trim() || !clubNo) return setError("Enter the login email and choose a club.");
+    setBusyKey("club");
+    try {
+      const result = await api.rpc("set_club_login", { p_email: clubEmail.trim(), p_club_no: Number(clubNo) });
+      if (!result || result.outcome !== "saved") throw new Error((result && result.message) || "Unable to save.");
+      setMessage(result.message);
+      setClubEmail("");
+      await loadClubLogins();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function removeClubLogin(userId) {
+    setMessage("");
+    setError("");
+    setBusyKey(`club:${userId}`);
+    try {
+      const result = await api.rpc("remove_club_login", { p_user_id: userId });
+      if (!result || result.outcome !== "saved") throw new Error((result && result.message) || "Unable to remove.");
+      setMessage(result.message);
+      await loadClubLogins();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyKey("");
+    }
+  }
 
   async function change(row, register, level) {
     setMessage("");
@@ -937,7 +990,7 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
 
   return (
     <div className="reg-wrap">
-      <Header title="Register Access" onHome={onHome} onSignOut={onSignOut} />
+      <Header title="Manage Access" onHome={onHome} onSignOut={onSignOut} />
 
       {!isAdmin ? (
         <div className="report-error">Only an administrator can change register access.</div>
@@ -970,8 +1023,8 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
                 ))}
               </select>
               <p className="reg-hint">
-                President and Treasurer get edit access to lockers, keys and issues. A nominated contact gets
-                issues only.
+                President and Treasurer get edit access to lockers, keys and notifications. A nominated contact
+                gets notifications only.
               </p>
               <button className="submit-btn" disabled={busyKey === "add"} type="submit">
                 Save person
@@ -1009,6 +1062,51 @@ function AccessScreen({ api, isAdmin, onHome, onSignOut }) {
               )}
             </div>
           ))}
+
+          {clubLogins !== null && (
+            <>
+              <h2 className="reg-name" style={{ margin: "28px 0 4px" }}>Club logins</h2>
+              <p className="reg-hint">
+                A club login can open Member Lookup (only the members of its own club) and can report Notifications.
+                Nothing else. The person needs a login first (Supabase, Authentication, Users).
+              </p>
+              <form className="reg-panel" onSubmit={saveClubLogin}>
+                <label className="field-label">Login email</label>
+                <input className="field" type="email" value={clubEmail} onChange={(e) => setClubEmail(e.target.value)} />
+                <label className="field-label">Club</label>
+                <select className="field" value={clubNo} onChange={(e) => setClubNo(e.target.value)}>
+                  <option value="">Choose a club…</option>
+                  {clubList.map((c) => (
+                    <option key={c.CLUBID} value={c.CLUBID}>
+                      {c.Club_Name}
+                    </option>
+                  ))}
+                </select>
+                <button className="submit-btn" disabled={busyKey === "club"} type="submit">
+                  Restrict this login to the club
+                </button>
+              </form>
+              {clubLogins.length === 0 && <div className="reg-meta">No club logins yet.</div>}
+              {clubLogins.map((c) => (
+                <div className="reg-item" key={c.user_id}>
+                  <div className="reg-item-row">
+                    <div>
+                      <div className="reg-name">{c.email}</div>
+                      <div className="reg-meta">{c.club_name || `Club ${c.club_no}`} · Member Lookup and Notifications</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="reg-btn danger"
+                      disabled={busyKey === `club:${c.user_id}`}
+                      onClick={() => removeClubLogin(c.user_id)}
+                    >
+                      Remove restriction
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
     </div>

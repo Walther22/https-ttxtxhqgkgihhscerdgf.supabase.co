@@ -59,6 +59,9 @@ export default function MemberPortal() {
   const [view, setView] = useState("landing");
 
   // What this person may do in the lockers, keys and venue issue screens.
+  // Set for club logins: they only see their own club and only Member Lookup.
+  const [scope, setScope] = useState({ restricted: false });
+
   const [registerAccess, setRegisterAccess] = useState({
     lockers: "none",
     keys: "none",
@@ -127,6 +130,15 @@ export default function MemberPortal() {
     }
   }
 
+  function loadPortalAccess(token) {
+    const api = createApi(SUPABASE_URL, SUPABASE_ANON_KEY, token);
+    loadRegisterAccess(api).then(setRegisterAccess).catch(() => {});
+    api
+      .rpc("portal_my_scope")
+      .then((result) => setScope(result && result.restricted ? result : { restricted: false }))
+      .catch(() => {});
+  }
+
   async function handleSetPassword(e) {
     e.preventDefault();
     setAuthError("");
@@ -156,9 +168,7 @@ export default function MemberPortal() {
       setRecovery(null);
       setNewPassword("");
       setConfirmPassword("");
-      loadRegisterAccess(createApi(SUPABASE_URL, SUPABASE_ANON_KEY, newSession.access_token))
-        .then(setRegisterAccess)
-        .catch(() => {});
+      loadPortalAccess(newSession.access_token);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -187,9 +197,7 @@ export default function MemberPortal() {
         throw new Error(data.error_description || data.msg || "Sign in failed");
       }
       setSession(data);
-      loadRegisterAccess(createApi(SUPABASE_URL, SUPABASE_ANON_KEY, data.access_token))
-        .then(setRegisterAccess)
-        .catch(() => {});
+      loadPortalAccess(data.access_token);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -205,6 +213,7 @@ export default function MemberPortal() {
   }
 
   function openSignIn() {
+    if (scope.restricted) return;
     setView("signin");
     // The sign-in flag needs to know who's a current FY member, so
     // make sure that roster is loaded even if Member Lookup was
@@ -504,6 +513,7 @@ export default function MemberPortal() {
     if (cameraOn) stopCamera();
     setSession(null);
     setRegisterAccess({ lockers: "none", keys: "none", issues: "none", admin: false });
+    setScope({ restricted: false });
     setMembers(null);
     setClubs([]);
     setSelectedClub("all");
@@ -1128,16 +1138,20 @@ export default function MemberPortal() {
             <button className="tool-card" onClick={openMemberLookup}>
               <span className="tool-card-title">Member Lookup</span>
               <span className="tool-card-desc">
-                Search and filter the current fiscal year roster
+                {scope.restricted
+                  ? `Search ${scope.club_name || "your club"} members`
+                  : "Search and filter the current fiscal year roster"}
               </span>
             </button>
 
-            <button className="tool-card" onClick={openSignIn}>
-              <span className="tool-card-title">Practice Sign-In</span>
-              <span className="tool-card-desc">
-                Scan or enter member IDs to log today's session
-              </span>
-            </button>
+            {!scope.restricted && (
+              <button className="tool-card" onClick={openSignIn}>
+                <span className="tool-card-title">Practice Sign-In</span>
+                <span className="tool-card-desc">
+                  Scan or enter member IDs to log today's session
+                </span>
+              </button>
+            )}
 
             {registerAccess.lockers !== "none" && (
               <button className="tool-card" onClick={() => setView("reg-lockers")}>
@@ -1155,7 +1169,7 @@ export default function MemberPortal() {
 
             {registerAccess.issues !== "none" && (
               <button className="tool-card" onClick={() => setView("reg-issues")}>
-                <span className="tool-card-title">Venue Issues</span>
+                <span className="tool-card-title">Notifications</span>
                 <span className="tool-card-desc">
                   Report faults at the venue, with a photo
                 </span>
@@ -1164,9 +1178,9 @@ export default function MemberPortal() {
 
             {registerAccess.admin && (
               <button className="tool-card" onClick={() => setView("reg-access")}>
-                <span className="tool-card-title">Register Access</span>
+                <span className="tool-card-title">Manage Access</span>
                 <span className="tool-card-desc">
-                  Choose who can use lockers, keys and venue issues
+                  Choose who can use lockers, keys and notifications, and set up club logins
                 </span>
               </button>
             )}
@@ -1199,6 +1213,7 @@ export default function MemberPortal() {
           {!reportLoading && !reportError && members && (
             <>
               <div className="filter-row">
+                {!scope.restricted && (
                 <div>
                   <label className="field-label" htmlFor="club-filter">
                     Club
@@ -1245,6 +1260,7 @@ export default function MemberPortal() {
                     ))}
                   </datalist>
                 </div>
+                )}
 
                 <div>
                   <label className="field-label" htmlFor="name-search">
